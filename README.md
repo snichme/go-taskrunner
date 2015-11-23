@@ -26,3 +26,5 @@ if err != nil {
   fmt.Fprint(runner, res)
 }
 ```
+
+Run with `go-tasks HelloWorld ls GH`
