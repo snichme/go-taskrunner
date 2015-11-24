@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"time"
 )
 
 func red(v string) string {
@@ -21,7 +22,7 @@ func grey(v string) string {
 }
 
 //TaskResult Bla bla
-type TaskResult string
+type TaskResult []byte
 
 //Task Bla bla
 type Task func(c <-chan TaskResult) <-chan TaskResult
@@ -46,14 +47,6 @@ func NewRunner(name string) *Runner {
 	}
 }
 
-func (r *Runner) reverse(s []string) []string {
-	//r := []rune(s)
-	for i, j := 0, len(s)-1; i < len(s)/2; i, j = i+1, j-1 {
-		s[i], s[j] = s[j], s[i]
-	}
-	return s
-}
-
 func (r *Runner) Write(p []byte) (n int, err error) {
 	return fmt.Fprintf(os.Stdout, "%s > %s\n", blue(r.name), grey(string(p)))
 }
@@ -69,18 +62,17 @@ func (r *Runner) Run(tasks []string) (TaskResult, error) {
 	//in := make(chan TaskResult, 0)
 	ttr := make([]Task, len(tasks))
 	i := 0
-	for _, taskName := range r.reverse(tasks) {
+	for _, taskName := range tasks {
 		t, exists := r.tasks[taskName]
 		if !exists {
 			fmt.Fprintf(r, red("Task %s does not exists"), taskName)
-			return "", fmt.Errorf("Task %s does not exists", taskName)
-
+			return nil, fmt.Errorf("Task %s does not exists", taskName)
 		}
 		ttr[i] = t
 		i++
 	}
 	if len(ttr) == 0 {
-		return "", errors.New("No tasks to run")
+		return nil, errors.New("No tasks to run")
 	}
 
 	in := make(chan TaskResult, 0)
@@ -106,12 +98,12 @@ func Combine(tasks ...Task) Task {
 	}
 }
 
-//DownloadFile put the response of the request on the TaskResult
+//DownloadFile put the response of the request on the stream
 func DownloadFile(url string) Task {
 	return func(in <-chan TaskResult) <-chan TaskResult {
 		out := make(chan TaskResult, 0)
 		go func() {
-			r := <-in
+			<-in
 			res, err := http.Get(url)
 			if err != nil {
 				log.Fatal(err)
@@ -121,28 +113,47 @@ func DownloadFile(url string) Task {
 			if err != nil {
 				log.Fatal(err)
 			}
-			out <- r + TaskResult(robots)
+			out <- TaskResult(robots)
 			close(out)
 		}()
 		return out
 	}
 }
 
-//Exec execute a command and put the result as TaskResult
+//Exec execute a command and put the result on the stream
 func Exec(command string) Task {
 	return func(in <-chan TaskResult) <-chan TaskResult {
 		out := make(chan TaskResult, 0)
 		go func() {
-			r := <-in
+			<-in
 			cmd := exec.Command(command)
 			res, err := cmd.Output()
 			if err != nil {
 				panic(err)
 			}
 
-			out <- r + TaskResult(res)
+			out <- TaskResult(res)
 			close(out)
 		}()
 		return out
 	}
+}
+
+//Printer prints the current data on the stream to stdout
+func Printer() Task {
+	return func(in <-chan TaskResult) <-chan TaskResult {
+		out := make(chan TaskResult, 0)
+		go func() {
+			r := <-in
+			fmt.Printf("%s [%s] %s", time.Now(), "Printer", r)
+			out <- r
+			close(out)
+		}()
+		return out
+	}
+}
+
+//TaskError Print a task error
+func TaskError(name string, err error) {
+	log.Fatalf("[%s] %s", name, err.Error())
 }
