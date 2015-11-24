@@ -1,4 +1,4 @@
-package main
+package gotrun
 
 import (
 	"errors"
@@ -36,6 +36,14 @@ type TaskRunner interface {
 type Runner struct {
 	name  string
 	tasks map[string]Task
+}
+
+//NewRunner Create a new runner
+func NewRunner(name string) *Runner {
+	return &Runner{
+		name:  name,
+		tasks: make(map[string]Task),
+	}
 }
 
 func (r *Runner) reverse(s []string) []string {
@@ -97,17 +105,6 @@ func Combine(tasks ...Task) Task {
 		return out
 	}
 }
-func addString(str string) Task {
-	return func(in <-chan TaskResult) <-chan TaskResult {
-		out := make(chan TaskResult, 0)
-		go func() {
-			r := <-in
-			out <- r + TaskResult(str)
-			close(out)
-		}()
-		return out
-	}
-}
 
 //DownloadFile put the response of the request on the TaskResult
 func DownloadFile(url string) Task {
@@ -147,32 +144,5 @@ func Exec(command string) Task {
 			close(out)
 		}()
 		return out
-	}
-
-}
-
-func main() {
-	tasksToRun := os.Args[1:]
-
-	runner := &Runner{
-		name:  "Runner",
-		tasks: make(map[string]Task),
-	}
-
-	runner.Task("ls", Exec("ls"))
-	runner.Task("GR", DownloadFile("http://www.google.com/robots.txt"))
-	runner.Task("GH", DownloadFile("http://www.google.com/humans.txt"))
-
-	runner.Task("AddHW", Combine(DownloadFile("http://www.google.com/robots.txt"), addString("Hello"), addString(" "), addString("World"), addString("!"), DownloadFile("http://www.google.com/humans.txt")))
-	runner.Task("AddHello", addString("Hello"))
-	runner.Task("AddSpace", addString(" "))
-	runner.Task("AddWorld", addString("World"))
-	runner.Task("Add!", addString("!"))
-
-	res, err := runner.Run(tasksToRun)
-	if err != nil {
-		fmt.Fprint(runner, red(err.Error()))
-	} else {
-		fmt.Fprint(runner, res)
 	}
 }
